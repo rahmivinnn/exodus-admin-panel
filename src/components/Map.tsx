@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { LoadRequest } from '../types';
 
 interface MapProps {
@@ -77,7 +76,17 @@ export const Map: React.FC<MapProps> = ({
 
   // Handle load request changes
   useEffect(() => {
-    if (!map.current || !loadRequest) return;
+    if (!map.current || !loadRequest) {
+      // Clear existing route if no loadRequest is provided
+      if (map.current && map.current.getSource('route')) {
+        map.current.removeLayer('route');
+        map.current.removeSource('route');
+      }
+      // Clear existing markers
+      markers.current.forEach(marker => marker.remove());
+      markers.current = [];
+      return;
+    }
 
     const updateMap = async () => {
       try {
@@ -115,7 +124,7 @@ export const Map: React.FC<MapProps> = ({
         const originCoords = originData.features[0]?.center;
         const destinationCoords = destinationData.features[0]?.center;
 
-        if (!originCoords || !destinationCoords) {
+        if (!originCoords || !destinationCoords || !map.current) {
           throw new Error('Could not find coordinates for addresses');
         }
 
@@ -165,7 +174,11 @@ export const Map: React.FC<MapProps> = ({
 
         const routeData = await routeResponse.json();
 
-        if (!map.current) return;
+        if (!map.current || !routeData.routes || routeData.routes.length === 0) {
+          console.error('No route found', routeData);
+          setError('Could not find a route for the given addresses.');
+          return;
+        }
 
         // Add route layer
         map.current.addSource('route', {
@@ -209,7 +222,7 @@ export const Map: React.FC<MapProps> = ({
         }, 'route');
 
         // Notify parent component about route details
-        if (onRouteCalculated) {
+        if (onRouteCalculated && routeData.routes && routeData.routes.length > 0) {
           const distance = routeData.routes[0].distance / 1609.34; // Convert meters to miles
           const duration = routeData.routes[0].duration / 3600; // Convert seconds to hours
           onRouteCalculated(distance, duration);
