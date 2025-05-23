@@ -1,25 +1,64 @@
 import React from 'react';
-import logo from './logo.svg';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { Provider } from 'react-redux';
+import { store } from './store';
+import Login from './components/Login';
+import Layout from './components/Layout';
+import Dashboard from './components/Dashboard';
+import Shipments from './components/Shipments';
 import './App.css';
+
+const AppRoutes = () => {
+  const { isAuthenticated } = useSelector((state: any) => state.auth);
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          !isAuthenticated ? (
+            <Login />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+      <Route
+        path="/"
+        element={
+          isAuthenticated ? (
+            <Layout>
+              <Dashboard />
+            </Layout>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/shipments"
+        element={
+          isAuthenticated ? (
+            <Layout>
+              <Shipments />
+            </Layout>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+    </Routes>
+  );
+};
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Provider store={store}>
+      <Router>
+        <AppRoutes />
+      </Router>
+    </Provider>
   );
 }
 
