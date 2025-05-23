@@ -76,168 +76,101 @@ export const Map: React.FC<MapProps> = ({
 
   // Handle load request changes
   useEffect(() => {
-    if (!map.current || !loadRequest) {
-      // Clear existing route if no loadRequest is provided
-      if (map.current && map.current.getSource('route')) {
+    if (!map.current) return;
+
+    if (loadRequest) {
+      // Clear existing routes and markers
+      markers.current.forEach(marker => marker.remove());
+      markers.current = [];
+
+      if (map.current.getSource('route')) {
         map.current.removeLayer('route');
         map.current.removeSource('route');
       }
-      // Clear existing markers
+
+      // Get coordinates for origin and destination
+      const origin = loadRequest.origin;
+      const destination = loadRequest.destination;
+
+      // Add markers
+      const originMarker = new mapboxgl.Marker({ color: '#10B981' })
+        .setLngLat([origin.longitude, origin.latitude])
+        .setPopup(new mapboxgl.Popup().setHTML(`
+          <div class="p-2">
+            <h3 class="font-semibold">Origin</h3>
+            <p>${origin.address}</p>
+          </div>
+        `))
+        .addTo(map.current);
+
+      const destinationMarker = new mapboxgl.Marker({ color: '#EF4444' })
+        .setLngLat([destination.longitude, destination.latitude])
+        .setPopup(new mapboxgl.Popup().setHTML(`
+          <div class="p-2">
+            <h3 class="font-semibold">Destination</h3>
+            <p>${destination.address}</p>
+          </div>
+        `))
+        .addTo(map.current);
+
+      markers.current.push(originMarker, destinationMarker);
+
+      // Get route
+      fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?geometries=geojson&access_token=${mapboxgl.accessToken}`)
+        .then(response => response.json())
+        .then(data => {
+          if (!map.current) return;
+          
+          const route = data.routes[0].geometry;
+          
+          map.current.addSource('route', {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: route
+            }
+          });
+
+          map.current.addLayer({
+            id: 'route',
+            type: 'line',
+            source: 'route',
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round'
+            },
+            paint: {
+              'line-color': '#3B82F6',
+              'line-width': 4,
+              'line-opacity': 0.75
+            }
+          });
+
+          // Fit bounds to show the entire route
+          const bounds = new mapboxgl.LngLatBounds();
+          route.coordinates.forEach((coord: [number, number]) => {
+            bounds.extend(coord);
+          });
+          map.current.fitBounds(bounds, {
+            padding: 50,
+            duration: 1000
+          });
+        })
+        .catch(error => {
+          console.error('Error fetching route:', error);
+        });
+    } else {
+      // Clear existing routes and markers
       markers.current.forEach(marker => marker.remove());
       markers.current = [];
-      return;
-    }
 
-    const updateMap = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        // Clear existing markers and route
-        markers.current.forEach(marker => marker.remove());
-        markers.current = [];
-
-        if (map.current.getSource('route')) {
-          map.current.removeLayer('route');
-          map.current.removeSource('route');
-        }
-
-        // Get coordinates for origin and destination
-        const origin = `${loadRequest.origin.city}, ${loadRequest.origin.state} ${loadRequest.origin.zipCode}`;
-        const destination = `${loadRequest.destination.city}, ${loadRequest.destination.state} ${loadRequest.destination.zipCode}`;
-
-        // Geocode addresses
-        const [originResponse, destinationResponse] = await Promise.all([
-          fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(origin)}.json?access_token=${mapboxgl.accessToken}`),
-          fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(destination)}.json?access_token=${mapboxgl.accessToken}`)
-        ]);
-
-        if (!originResponse.ok || !destinationResponse.ok) {
-          throw new Error('Failed to geocode addresses');
-        }
-
-        const [originData, destinationData] = await Promise.all([
-          originResponse.json(),
-          destinationResponse.json()
-        ]);
-
-        const originCoords = originData.features[0]?.center;
-        const destinationCoords = destinationData.features[0]?.center;
-
-        if (!originCoords || !destinationCoords || !map.current) {
-          throw new Error('Could not find coordinates for addresses');
-        }
-
-        // Add markers with custom HTML
-        const originMarker = new mapboxgl.Marker({ color: '#3B82F6' })
-          .setLngLat(originCoords)
-          .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
-            <div class="p-2">
-              <h3 class="font-semibold text-blue-600">Origin</h3>
-              <p class="text-sm">${origin}</p>
-              <p class="text-xs text-gray-500 mt-1">Click for details</p>
-            </div>
-          `))
-          .addTo(map.current);
-
-        const destinationMarker = new mapboxgl.Marker({ color: '#10B981' })
-          .setLngLat(destinationCoords)
-          .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
-            <div class="p-2">
-              <h3 class="font-semibold text-green-600">Destination</h3>
-              <p class="text-sm">${destination}</p>
-              <p class="text-xs text-gray-500 mt-1">Click for details</p>
-            </div>
-          `))
-          .addTo(map.current);
-
-        markers.current = [originMarker, destinationMarker];
-
-        // Fit map to show both markers
-        const bounds = new mapboxgl.LngLatBounds();
-        bounds.extend(originCoords);
-        bounds.extend(destinationCoords);
-        map.current.fitBounds(bounds, {
-          padding: 50,
-          maxZoom: 10,
-          duration: 1000
-        });
-
-        // Get route
-        const routeResponse = await fetch(
-          `https://api.mapbox.com/directions/v5/mapbox/driving/${originCoords.join(',')};${destinationCoords.join(',')}?geometries=geojson&access_token=${mapboxgl.accessToken}`
-        );
-
-        if (!routeResponse.ok) {
-          throw new Error('Failed to calculate route');
-        }
-
-        const routeData = await routeResponse.json();
-
-        if (!map.current || !routeData.routes || routeData.routes.length === 0) {
-          console.error('No route found', routeData);
-          setError('Could not find a route for the given addresses.');
-          return;
-        }
-
-        // Add route layer
-        map.current.addSource('route', {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            properties: {},
-            geometry: routeData.routes[0].geometry
-          }
-        });
-
-        map.current.addLayer({
-          id: 'route',
-          type: 'line',
-          source: 'route',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': '#3B82F6',
-            'line-width': 4,
-            'line-opacity': 0.8
-          }
-        });
-
-        // Add route background for better visibility
-        map.current.addLayer({
-          id: 'route-background',
-          type: 'line',
-          source: 'route',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': '#ffffff',
-            'line-width': 6,
-            'line-opacity': 0.8
-          }
-        }, 'route');
-
-        // Notify parent component about route details
-        if (onRouteCalculated && routeData.routes && routeData.routes.length > 0) {
-          const distance = routeData.routes[0].distance / 1609.34; // Convert meters to miles
-          const duration = routeData.routes[0].duration / 3600; // Convert seconds to hours
-          onRouteCalculated(distance, duration);
-        }
-
-      } catch (err) {
-        console.error('Error updating map:', err);
-        setError(err instanceof Error ? err.message : 'Failed to update map');
-      } finally {
-        setIsLoading(false);
+      if (map.current.getSource('route')) {
+        map.current.removeLayer('route');
+        map.current.removeSource('route');
       }
-    };
-
-    updateMap();
-  }, [loadRequest, onRouteCalculated]);
+    }
+  }, [loadRequest]);
 
   return (
     <div className="relative">

@@ -9,6 +9,7 @@ export interface User {
   phone?: string;
   createdAt: string;
   updatedAt: string;
+  avatar?: string;
 }
 
 export type EquipmentType = 
@@ -22,7 +23,7 @@ export type EquipmentType =
 
 export type ServiceType = 'LTL' | 'FTL' | 'Refrigerated' | 'Hazmat' | 'Expedited' | 'Intermodal';
 export type PackagingType = 'pallets' | 'crates' | 'box' | 'drum' | 'roll' | 'bundle' | 'bale';
-export type LoadStatus = 'pending' | 'in_transit' | 'delivered' | 'cancelled' | 'on_hold' | 'scheduled';
+export type LoadStatus = 'pending' | 'accepted' | 'in_transit' | 'delivered' | 'cancelled' | 'on_hold' | 'scheduled';
 
 export interface Location {
   address: string;
@@ -46,21 +47,15 @@ export interface Address {
 
 export interface LoadRequest {
   id: string;
+  status: LoadStatus;
   origin: Address;
   destination: Address;
   serviceType: ServiceType;
-  equipmentType: string;
-  weight: number;
-  shipDate: string;
-  status: LoadStatus;
-  customer: {
-    id: string;
-    name: string;
-    email: string;
-  };
+  pickupDate: string;
+  deliveryDate: string;
+  items: ShipmentItem[];
   createdAt: string;
   updatedAt: string;
-  notes?: string;
 }
 
 export interface LoadHistory {
@@ -86,13 +81,10 @@ export interface SmartBundle {
 
 export interface Notification {
   id: string;
-  type: 'shipment_update' | 'quote_received' | 'document_uploaded' | 'status_change' | 'alert';
-  title: string;
+  type: string;
   message: string;
   read: boolean;
   createdAt: string;
-  link?: string;
-  priority: 'low' | 'medium' | 'high';
 }
 
 export interface RouteInfo {
@@ -103,20 +95,16 @@ export interface RouteInfo {
 
 export interface Shipment {
   id: string;
-  trackingNumber: string;
-  loadRequest: LoadRequest;
-  carrier: Carrier;
   status: LoadStatus;
   origin: Address;
   destination: Address;
   serviceType: ServiceType;
-  items: ShipmentItem[];
   pickupDate: string;
   deliveryDate: string;
+  items: ShipmentItem[];
+  documents: Document[];
   createdAt: string;
   updatedAt: string;
-  documents: Document[];
-  events: ShipmentEvent[];
 }
 
 export interface ShipmentItem {
@@ -138,54 +126,34 @@ export interface ShipmentItem {
 
 export interface Quote {
   id: string;
-  loadRequest: LoadRequest;
-  carrier: Carrier;
+  loadRequestId: string;
+  carrierId: string;
   price: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  status: 'pending' | 'accepted' | 'rejected';
   validUntil: string;
   notes?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface Carrier {
   id: string;
   name: string;
-  mcNumber: string;
-  dotNumber: string;
   active: boolean;
-  rating: number;
+  contacts: User[];
   equipment: string[];
   insurance: {
     provider: string;
     policyNumber: string;
-    coverage: number;
-    expiryDate: string;
+    expirationDate: string;
   };
-  contacts: {
-    name: string;
-    email: string;
-    phone: string;
-    role: string;
-  }[];
-  documents: Document[];
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface Document {
   id: string;
-  type: 'BOL' | 'POD' | 'Invoice' | 'Insurance' | 'Contract' | 'Other';
-  name: string;
-  url: string;
-  uploadedBy: {
-    id: string;
-    name: string;
-    role: string;
-  };
-  uploadedAt: string;
+  type: string;
   status: 'pending' | 'approved' | 'rejected';
-  notes?: string;
+  url: string;
+  uploadedAt: string;
+  expiresAt?: string;
 }
 
 export interface Industry {
@@ -237,16 +205,11 @@ export interface Settings {
 
 export interface ShipmentEvent {
   id: string;
-  type: 'pickup' | 'delivery' | 'status_change' | 'location_update' | 'document_upload';
-  timestamp: string;
-  location?: Address;
-  status?: LoadStatus;
+  shipmentId: string;
+  type: string;
   description: string;
-  user?: {
-    id: string;
-    name: string;
-    role: string;
-  };
+  location: Address;
+  timestamp: string;
 }
 
 export interface DashboardStats {
@@ -258,7 +221,6 @@ export interface DashboardStats {
   totalShipments: number;
   hazmatShipments: number;
   refrigeratedShipments: number;
-  serviceDistribution: Record<ServiceType, number>;
-  recentEvents: ShipmentEvent[];
-  alerts: Notification[];
+  pendingDocuments: number;
+  activeUsers: number;
 } 
